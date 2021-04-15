@@ -346,23 +346,32 @@ class TaskEnvironment(object):
     def _get_live_demos(self, amount: int,
                         callable_each_step: Callable[
                             [Observation], None] = None,
-                        max_attempts: int = _MAX_DEMO_ATTEMPTS) -> List[Demo]:
+                        max_attempts: int = _MAX_DEMO_ATTEMPTS,
+                        random_pos: bool = True,
+                        seed: str = 'none') -> List[Demo]:
         demos = []
         for i in range(amount):
             attempts = max_attempts
             while attempts > 0:
-                random_seed = np.random.get_state()
-                self.reset()
+                if seed == 'none': 
+                    seed = np.random.get_state()
+                
+                if random_pos:
+                    print('reset seed')
+                    self.reset()
                 logging.info('Collecting demo %d' % i)
                 try:
                     demo = self._scene.get_demo(
                         callable_each_step=callable_each_step)
-                    demo.random_seed = random_seed
+                    demo.random_seed = seed
                     demos.append(demo)
                     break
                 except Exception as e:
                     attempts -= 1
+                    print("failure")
+                    print("Error: " + str(e))
                     logging.info('Bad demo. ' + str(e))
+                    random_pos = True
             if attempts <= 0:
                 raise RuntimeError(
                     'Could not collect demos. Maybe a problem with the task?')
@@ -371,3 +380,12 @@ class TaskEnvironment(object):
     def reset_to_demo(self, demo: Demo) -> (List[str], Observation):
         demo.restore_state()
         return self.reset()
+    
+    def get_demos_with_seed(self, amount: int, seed: tuple, callable_each_step: Callable[[Observation], None] = None,
+                  ) -> List[Demo]:
+        ctr_loop = self._robot.arm.joints[0].is_control_loop_enabled()
+        self._robot.arm.set_control_loop_enabled(True)
+        demos = self._get_live_demos(
+                amount, callable_each_step, 1, random_pos=False, seed=seed)
+        self._robot.arm.set_control_loop_enabled(ctr_loop)
+        return demos

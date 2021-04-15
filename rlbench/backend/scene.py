@@ -136,11 +136,11 @@ class Scene(object):
         arm, gripper = self._initial_robot_state
         self._pyrep.set_configuration_tree(arm)
         self._pyrep.set_configuration_tree(gripper)
-        self._robot.arm.set_joint_positions(self._start_arm_joint_pos)
+        self._robot.arm.set_joint_positions(self._start_arm_joint_pos, disable_dynamics=True)
         self._robot.arm.set_joint_target_velocities(
             [0] * len(self._robot.arm.joints))
         self._robot.gripper.set_joint_positions(
-            self._starting_gripper_joint_pos)
+            self._starting_gripper_joint_pos, disable_dynamics=True)
         self._robot.gripper.set_joint_target_velocities(
             [0] * len(self._robot.gripper.joints))
 
@@ -224,13 +224,7 @@ class Scene(object):
 
         camera = self._cam_front
         intrinsic_matrix = get_intrinsic_matrix(camera)
-
-        def get_extrinsic_matrix(camera: VisionSensor):
-            camera_matrix = camera.get_matrix()
-            extrinsic_matrix = np.array([camera_matrix[0:4],camera_matrix[4:8],camera_matrix[8:12],[0,0,0,1]])
-            return extrinsic_matrix
-
-        extrinsic_matrix = get_extrinsic_matrix(camera)
+        extrinsic_matrix = camera.get_matrix()
 
         left_shoulder_rgb, left_shoulder_depth = get_rgb_depth(
             self._cam_over_shoulder_left, lsc_ob.rgb, lsc_ob.depth,
@@ -393,7 +387,6 @@ class Scene(object):
 
         front_mask = get_mask(self._cam_front_mask,
                                 fc_mask_fn) if fc_ob.mask else None
-        print('my observation')
         obs = MyObservation(
             front_rgb=front_rgb,
             front_depth=front_depth,
@@ -447,8 +440,10 @@ class Scene(object):
         """Returns a demo (list of observations)"""
 
         if not self._has_init_task:
+            print('init task')
             self.init_task()
         if not self._has_init_episode:
+            print('init episode')
             self.init_episode(self._variation_index,
                               randomly_place=randomly_place)
         self._has_init_episode = False
