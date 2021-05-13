@@ -91,7 +91,7 @@ class TaskEnvironment(object):
         return desc, self._scene.get_observation()
 
     def get_observation(self) -> Observation:
-        return self._scene.get_my_observation()
+        return self._scene.get_observation()
 
     def _assert_action_space(self, action, expected_shape):
         if np.shape(action) != expected_shape:
@@ -381,6 +381,10 @@ class TaskEnvironment(object):
         demo.restore_state()
         return self.reset()
     
+    def reset_to_seed(self, seed: tuple):
+        np.random.set_state(seed)
+        return self.reset()
+
     def get_demos_with_seed(self, amount: int, seed: tuple, callable_each_step: Callable[[Observation], None] = None,
                   ) -> List[Demo]:
         ctr_loop = self._robot.arm.joints[0].is_control_loop_enabled()

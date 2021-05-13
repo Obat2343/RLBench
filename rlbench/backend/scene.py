@@ -6,7 +6,7 @@ from pyrep.objects.vision_sensor import VisionSensor
 from rlbench.noise_model import NoiseModel
 
 from rlbench.backend.spawn_boundary import SpawnBoundary
-from rlbench.backend.observation import Observation, MyObservation
+from rlbench.backend.observation import Observation
 from rlbench.backend.exceptions import (
     WaypointError, BoundaryError, NoWaypointsError, DemoError)
 from rlbench.backend.utils import rgb_handles_to_mask
@@ -222,9 +222,14 @@ class Scene(object):
             intrinsic_matrix = np.array([[-1 * focal_length_W, 0, cw],[0, -1 * focal_length_H, ch],[0,0,1]])
             return intrinsic_matrix
 
-        camera = self._cam_front
-        intrinsic_matrix = get_intrinsic_matrix(camera)
-        extrinsic_matrix = camera.get_matrix()
+        front_intrinsic_matrix = get_intrinsic_matrix(self._cam_front)
+        front_extrinsic_matrix = self._cam_front.get_matrix()
+        left_intrinsic_matrix = get_intrinsic_matrix(self._cam_over_shoulder_left)
+        left_extrinsic_matrix = self._cam_over_shoulder_left.get_matrix()
+        right_intrinsic_matrix = get_intrinsic_matrix(self._cam_over_shoulder_right)
+        right_extrinsic_matrix = self._cam_over_shoulder_right.get_matrix()
+        wrist_intrinsic_matrix = get_intrinsic_matrix(self._cam_wrist)
+        wrist_extrinsic_matrix = self._cam_wrist.get_matrix()
 
         left_shoulder_rgb, left_shoulder_depth = get_rgb_depth(
             self._cam_over_shoulder_left, lsc_ob.rgb, lsc_ob.depth,
@@ -251,12 +256,20 @@ class Scene(object):
         obs = Observation(
             left_shoulder_rgb=left_shoulder_rgb,
             left_shoulder_depth=left_shoulder_depth,
+            left_shoulder_intrinsic_matrix = left_intrinsic_matrix,
+            left_shoulder_extrinsic_matrix = left_extrinsic_matrix,
             right_shoulder_rgb=right_shoulder_rgb,
             right_shoulder_depth=right_shoulder_depth,
+            right_shoulder_intrinsic_matrix = right_intrinsic_matrix,
+            right_shoulder_extrinsic_matrix = right_extrinsic_matrix,
             wrist_rgb=wrist_rgb,
             wrist_depth=wrist_depth,
+            wrist_intrinsic_matrix = wrist_intrinsic_matrix,
+            wrist_extrinsic_matrix = wrist_extrinsic_matrix,
             front_rgb=front_rgb,
             front_depth=front_depth,
+            front_intrinsic_matrix = front_intrinsic_matrix,
+            front_extrinsic_matrix = front_extrinsic_matrix,
             left_shoulder_mask=left_shoulder_mask,
             right_shoulder_mask=right_shoulder_mask,
             wrist_mask=wrist_mask,
@@ -290,141 +303,7 @@ class Scene(object):
             task_low_dim_state=(
                 self._active_task.get_low_dim_state() if
                 self._obs_config.task_low_dim_state else None),
-            joints=self._robot.arm.joints,
-            intrinsic_matrix=intrinsic_matrix,
-            extrinsic_matrix=extrinsic_matrix
-                )
-
-        obs = self._active_task.decorate_observation(obs)
-        return obs
-
-    def get_my_observation(self) -> Observation:
-        tip = self._robot.arm.get_tip()
-
-        joint_forces = None
-        if self._obs_config.joint_forces:
-            fs = self._robot.arm.get_joint_forces()
-            vels = self._robot.arm.get_joint_target_velocities()
-            joint_forces = self._obs_config.joint_forces_noise.apply(
-                np.array([-f if v < 0 else f for f, v in zip(fs, vels)]))
-
-        ee_forces_flat = None
-        if self._obs_config.gripper_touch_forces:
-            ee_forces = self._robot.gripper.get_touch_sensor_forces()
-            ee_forces_flat = []
-            for eef in ee_forces:
-                ee_forces_flat.extend(eef)
-            ee_forces_flat = np.array(ee_forces_flat)
-
-        lsc_ob = self._obs_config.left_shoulder_camera
-        rsc_ob = self._obs_config.right_shoulder_camera
-        wc_ob = self._obs_config.wrist_camera
-        fc_ob = self._obs_config.front_camera
-
-        lsc_mask_fn = (
-            rgb_handles_to_mask if lsc_ob.masks_as_one_channel else lambda x: x)
-        rsc_mask_fn = (
-            rgb_handles_to_mask if rsc_ob.masks_as_one_channel else lambda x: x)
-        wc_mask_fn = (
-            rgb_handles_to_mask if wc_ob.masks_as_one_channel else lambda x: x)
-        fc_mask_fn = (
-            rgb_handles_to_mask if fc_ob.masks_as_one_channel else lambda x: x)
-
-        # add robot joints
-        joints = self._robot.arm.joints
-
-        def get_rgb_depth(sensor: VisionSensor, get_rgb: bool, get_depth: bool,
-                            rgb_noise: NoiseModel, depth_noise: NoiseModel,
-                            depth_in_meters: bool):
-            rgb = depth = None
-            if sensor is not None and (get_rgb or get_depth):
-                sensor.handle_explicitly()
-                if get_rgb:
-                    rgb = sensor.capture_rgb()
-                    if rgb_noise is not None:
-                        rgb = rgb_noise.apply(rgb)
-                if get_depth:
-                    depth = sensor.capture_depth(depth_in_meters)
-                    if depth_noise is not None:
-                        depth = depth_noise.apply(depth)
-            return rgb, depth
-
-        def get_mask(sensor: VisionSensor, mask_fn):
-            mask = None
-            if sensor is not None:
-                sensor.handle_explicitly()
-                mask = mask_fn(sensor.capture_rgb())
-            return mask
-
-        def get_intrinsic_matrix(camera: VisionSensor):
-            # get intrinsic matrix
-            H, W = camera.get_resolution() # TODO check HW
-            angle = camera.get_perspective_angle()
-            tan_angle = math.tan(math.radians(angle))
-
-            focal_length_H = H / (2 * math.tan(math.radians(angle / 2)))
-            focal_length_W = W /(2 * math.tan(math.radians(angle / 2)))
-
-            cw = W / 2
-            ch = H / 2
-
-            intrinsic_matrix = np.array([[-1 * focal_length_W, 0, cw],[0, -1 * focal_length_H, ch],[0,0,1]])
-            return intrinsic_matrix
-
-        camera = self._cam_front
-        intrinsic_matrix = get_intrinsic_matrix(camera)
-
-        def get_extrinsic_matrix(camera: VisionSensor):
-            camera_matrix = camera.get_matrix()
-            extrinsic_matrix = np.array([camera_matrix[0:4],camera_matrix[4:8],camera_matrix[8:12],[0,0,0,1]])
-            return extrinsic_matrix
-
-        extrinsic_matrix = get_extrinsic_matrix(camera)
-
-        front_rgb, front_depth = get_rgb_depth(
-            self._cam_front, fc_ob.rgb, fc_ob.depth,
-            fc_ob.rgb_noise, fc_ob.depth_noise, fc_ob.depth_in_meters)
-
-        front_mask = get_mask(self._cam_front_mask,
-                                fc_mask_fn) if fc_ob.mask else None
-        obs = MyObservation(
-            front_rgb=front_rgb,
-            front_depth=front_depth,
-            front_mask=front_mask,
-            joint_velocities=(
-                self._obs_config.joint_velocities_noise.apply(
-                    np.array(self._robot.arm.get_joint_velocities()))
-                if self._obs_config.joint_velocities else None),
-            joint_positions=(
-                self._obs_config.joint_positions_noise.apply(
-                    np.array(self._robot.arm.get_joint_positions()))
-                if self._obs_config.joint_positions else None),
-            joint_forces=(joint_forces
-                            if self._obs_config.joint_forces else None),
-            gripper_open=(
-                (1.0 if self._robot.gripper.get_open_amount()[0] > 0.9 else 0.0)
-                if self._obs_config.gripper_open else None),
-            gripper_pose=(
-                np.array(tip.get_pose())
-                if self._obs_config.gripper_pose else None),
-            gripper_matrix=(
-                np.reshape(tip.get_matrix(), (3, 4))
-                if self._obs_config.gripper_matrix else None),
-            gripper_touch_forces=(
-                ee_forces_flat
-                if self._obs_config.gripper_touch_forces else None),
-            gripper_joint_positions=(
-                np.array(self._robot.gripper.get_joint_positions())
-                if self._obs_config.gripper_joint_positions else None),
-            wrist_camera_matrix=(
-                np.reshape(self._cam_wrist.get_matrix(), (3, 4))
-                if self._cam_wrist.still_exists() else None),
-            task_low_dim_state=(
-                self._active_task.get_low_dim_state() if
-                self._obs_config.task_low_dim_state else None),
-            joints=self._robot.arm.joints,
-            intrinsic_matrix=intrinsic_matrix,
-            extrinsic_matrix=extrinsic_matrix
+            joints=self._robot.arm.joints
                 )
 
         obs = self._active_task.decorate_observation(obs)
