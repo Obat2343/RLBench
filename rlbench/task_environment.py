@@ -74,8 +74,9 @@ class TaskEnvironment(object):
     def variation_count(self) -> int:
         return self._task.variation_count()
 
-    def reset(self) -> (List[str], Observation):
+    def reset(self):
         self._scene.reset()
+        print("reset")
         try:
             desc = self._scene.init_episode(
                 self._variation_number, max_attempts=_MAX_RESET_ATTEMPTS,
@@ -377,12 +378,14 @@ class TaskEnvironment(object):
                     'Could not collect demos. Maybe a problem with the task?')
         return demos
 
-    def reset_to_demo(self, demo: Demo) -> (List[str], Observation):
+    def reset_to_demo(self, demo: Demo):
         demo.restore_state()
+        print("reset to demo")
         return self.reset()
     
     def reset_to_seed(self, seed: tuple):
         np.random.set_state(seed)
+        print("reset to seed")
         return self.reset()
 
     def get_demos_with_seed(self, amount: int, seed: tuple, callable_each_step: Callable[[Observation], None] = None,
@@ -392,4 +395,5 @@ class TaskEnvironment(object):
         demos = self._get_live_demos(
                 amount, callable_each_step, 1, random_pos=False, seed=seed)
         self._robot.arm.set_control_loop_enabled(ctr_loop)
+        print("get demo")
         return demos
