@@ -52,8 +52,11 @@ class Point(Waypoint):
         else:
             path = arm.get_path(self._waypoint.get_position(),
                                 euler=self._waypoint.get_orientation(),
-                                ignore_collisions=(self._ignore_collisions or
-                                                   ignore_collisions))
+                                ignore_collisions=(self._ignore_collisions or ignore_collisions),
+                                trials=300,
+                                max_configs=100,
+                                max_time_ms=10,
+                                trials_per_goal=10)
         return path
 
 

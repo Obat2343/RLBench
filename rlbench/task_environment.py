@@ -6,6 +6,7 @@ from pyquaternion import Quaternion
 from pyrep import PyRep
 from pyrep.errors import IKError
 from pyrep.objects import Dummy
+from pyrep.errors import ConfigurationError, ConfigurationPathError, IKError
 
 from rlbench import utils
 from rlbench.action_modes import ArmActionMode, ActionMode
@@ -116,8 +117,25 @@ class TaskEnvironment(object):
             joint_positions = self._robot.arm.solve_ik(
                 action[:3], quaternion=action[3:], relative_to=relative_to)
             self._robot.arm.set_joint_target_positions(joint_positions)
+            IKError_flag = False
         except IKError as e:
-            raise InvalidActionError('Could not find a path.') from e
+            print(e)
+            IKError_flag = True
+            pass
+        
+        if IKError_flag:
+            try:
+                configs = self._robot.arm.solve_ik_via_sampling(
+                    action[:3], quaternion=action[3:], ignore_collisions=False, trials=500, max_configs=100, 
+                    distance_threshold = 1.30, relative_to=relative_to)
+                joint_positions = configs[0]
+                self._robot.arm.set_joint_target_positions(joint_positions)
+            except ConfigurationError as e:
+                print(e)
+                raise InvalidActionError('Could not find a path.') from e
+            except:
+                raise ValueError("Stop here")
+
         done = False
         prev_values = None
         # Move until reached target joint positions or until we stop moving
