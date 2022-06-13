@@ -11,6 +11,7 @@ few-shot learning. [Click here for website and paper.](https://sites.google.com/
 **Contents:**
 - [Announcements](#announcements)
 - [Install](#install)
+- [Running Headless](#running-headless)
 - [Getting Started](#getting-started)
     - [Few-Shot Learning and Meta Learning](#few-shot-learning-and-meta-learning)
     - [Reinforcement Learning](#reinforcement-learning)
@@ -28,20 +29,28 @@ few-shot learning. [Click here for website and paper.](https://sites.google.com/
 
 ## Announcements
 
-### 8 September, 2020
+### 18 February 2022
+
+- **Version 1.2.0 is live!** Note: This release will cause code-breaking API changes for action modes.
+
+### 1 July 2021
+
+- New instructions on headless GPU rendering [here](#running-headless)!
+
+### 8 September 2020
 
 - New tutorial series on task creation [here](https://www.youtube.com/watch?v=bKaK_9O3v7Y&list=PLsffAlO5lBTRiBwnkw2-x0U7t6TrNCkfc)!
 
-### 1 April, 2020
+### 1 April 2020
 
 - We added a Discord channel to allow the RLBench community to help one another. Click the Discord badge above.
 
-### 28 January, 2020
+### 28 January 2020
 
 - RLBench has been accepted to RA-L with presentation at ICRA!
 - Ability to easily swap out arms added. [See here](#swapping-arms).
 
-### 17 December, 2019
+### 17 December 2019
 
 - Gym is now supported!
 
@@ -63,6 +72,32 @@ pip install .
 
 And that's it!
 
+## Running Headless
+
+You can run RLBench headlessly with VirtualGL. VirtualGL is an open source toolkit that gives any Unix or Linux remote display software the ability to run OpenGL applications **with full 3D hardware acceleration**.
+First insure that you have the nVidia proprietary driver installed. I.e. you should get an output when running `nvidia-smi`. Now run the following commands:
+```bash
+sudo apt-get install xorg libxcb-randr0-dev libxrender-dev libxkbcommon-dev libxkbcommon-x11-0 libavcodec-dev libavformat-dev libswscale-dev
+sudo nvidia-xconfig -a --use-display-device=None --virtual=1280x1024
+# Install VirtualGL
+wget https://sourceforge.net/projects/virtualgl/files/2.5.2/virtualgl_2.5.2_amd64.deb/download -O virtualgl_2.5.2_amd64.deb
+sudo dpkg -i virtualgl*.deb
+rm virtualgl*.deb
+```
+You will now need to reboot, and then start the X server:
+```bash
+sudo reboot
+nohup sudo X &
+```
+Now we are good to go! To render the application with the first GPU, you can do the following:
+```bash
+export DISPLAY=:0.0
+python my_pyrep_app.py
+```
+To render with the second GPU, you will insetad set display as: `export DISPLAY=:0.1`, and so on.
+
+**Acknowledgement**: Special thanks to Boyuan Chen (UC Berkeley) for bringing VirtualGL to my attention!
+
 ## Getting Started
 
 The benchmark places particular emphasis on few-shot learning and meta learning 
@@ -76,12 +111,17 @@ collection of X training tasks and 5 tests tasks. Here X can be 10, 25, 50, or 9
 For example, to work on the task set with 10 training tasks, we import `FS10_V1`:
 
 ```python
-from rlbench.environment import Environment
-from rlbench.action_modes import ActionMode, ArmActionMode
-from rlbench.tasks import FS10_V1
 import numpy as np
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import JointVelocity
+from rlbench.action_modes.gripper_action_modes import Discrete
+from rlbench.environment import Environment
+from rlbench.tasks import FS10_V1
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
+action_mode = MoveArmThenGripper(
+  arm_action_mode=JointVelocity(),
+  gripper_action_mode=Discrete()
+)
 env = Environment(action_mode)
 env.launch()
 
@@ -91,7 +131,7 @@ task_to_train = np.random.choice(train_tasks, 1)[0]
 task = env.get_task(task_to_train)
 task.sample_variation()  # random variation
 descriptions, obs = task.reset()
-obs, reward, terminate = task.step(np.random.normal(size=env.action_size))
+obs, reward, terminate = task.step(np.random.normal(size=env.action_shape))
 ```
 
 A full example can be seen in [examples/few_shot_rl.py](examples/few_shot_rl.py).
@@ -99,18 +139,23 @@ A full example can be seen in [examples/few_shot_rl.py](examples/few_shot_rl.py)
 ### Reinforcement Learning
 
 ```python
-from rlbench.environment import Environment
-from rlbench.action_modes import ActionMode, ArmActionMode
-from rlbench.tasks import ReachTarget
 import numpy as np
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import JointVelocity
+from rlbench.action_modes.gripper_action_modes import Discrete
+from rlbench.environment import Environment
+from rlbench.tasks import ReachTarget
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
+action_mode = MoveArmThenGripper(
+  arm_action_mode=JointVelocity(),
+  gripper_action_mode=Discrete()
+)
 env = Environment(action_mode)
 env.launch()
 
 task = env.get_task(ReachTarget)
 descriptions, obs = task.reset()
-obs, reward, terminate = task.step(np.random.normal(size=env.action_size))
+obs, reward, terminate = task.step(np.random.normal(size=env.action_shape))
 ```
 
 A full example can be seen in [examples/single_task_rl.py](examples/single_task_rl.py).
@@ -120,19 +165,24 @@ If you would like to bootstrap from demonstrations, then take a look at [example
 ### Sim-to-Real
 
 ```python
-from rlbench import DomainRandomizationEnvironment
+import numpy as np
+from rlbench import Environment
 from rlbench import RandomizeEvery
 from rlbench import VisualRandomizationConfig
-from rlbench.action_modes import ActionMode, ArmActionMode
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import JointVelocity
+from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.tasks import OpenDoor
-import numpy as np
 
 # We will borrow some from the tests dir
 rand_config = VisualRandomizationConfig(
     image_directory='../tests/unit/assets/textures')
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
-env = DomainRandomizationEnvironment(
+action_mode = MoveArmThenGripper(
+  arm_action_mode=JointVelocity(),
+  gripper_action_mode=Discrete()
+)
+env = Environment(
     action_mode, randomize_every=RandomizeEvery.EPISODE, 
     frequency=1, visual_randomization_config=rand_config)
 
@@ -140,7 +190,7 @@ env.launch()
 
 task = env.get_task(OpenDoor)
 descriptions, obs = task.reset()
-obs, reward, terminate = task.step(np.random.normal(size=env.action_size))
+obs, reward, terminate = task.step(np.random.normal(size=env.action_shape))
 ```
 
 A full example can be seen in [examples/single_task_rl_domain_randomization.py](examples/single_task_rl_domain_randomization.py).
@@ -148,15 +198,20 @@ A full example can be seen in [examples/single_task_rl_domain_randomization.py](
 ### Imitation Learning
 
 ```python
-from rlbench.environment import Environment
-from rlbench.action_modes import ArmActionMode, ActionMode
-from rlbench.tasks import ReachTarget
 import numpy as np
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import JointVelocity
+from rlbench.action_modes.gripper_action_modes import Discrete
+from rlbench.environment import Environment
+from rlbench.tasks import ReachTarget
 
 # To use 'saved' demos, set the path below
 DATASET = 'PATH/TO/YOUR/DATASET'
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
+action_mode = MoveArmThenGripper(
+  arm_action_mode=JointVelocity(),
+  gripper_action_mode=Discrete()
+)
 env = Environment(action_mode, DATASET)
 env.launch()
 
@@ -182,12 +237,17 @@ collection of X training tasks. Here X can be 15, 30, 55, or 100.
 For example, to work on the task set with 15 training tasks, we import `MT15_V1`:
 
 ```python
-from rlbench.environment import Environment
-from rlbench.action_modes import ActionMode, ArmActionMode
-from rlbench.tasks import MT15_V1
 import numpy as np
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import JointVelocity
+from rlbench.action_modes.gripper_action_modes import Discrete
+from rlbench.environment import Environment
+from rlbench.tasks import MT15_V1
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
+action_mode = MoveArmThenGripper(
+  arm_action_mode=JointVelocity(),
+  gripper_action_mode=Discrete()
+)
 env = Environment(action_mode)
 env.launch()
 
@@ -196,7 +256,7 @@ task_to_train = np.random.choice(train_tasks, 1)[0]
 task = env.get_task(task_to_train)
 task.sample_variation()  # random variation
 descriptions, obs = task.reset()
-obs, reward, terminate = task.step(np.random.normal(size=env.action_size))
+obs, reward, terminate = task.step(np.random.normal(size=env.action_shape))
 ```
 
 A full example can be seen in [examples/multi_task_learning.py](examples/multi_task_learning.py).
@@ -249,11 +309,12 @@ Currently supported arms:
 - Mico arm with Mico gripper `(mico)`
 - Jaco arm with 3-finger Jaco gripper `(jaco)`
 - Sawyer arm with Baxter gripper `(sawyer)`
+- UR5 arm with Robotiq 85 gripper `(ur5)`
 
 You can then swap out the arm using `robot_configuration`:
 
 ```python
-env = Environment(action_mode=action_mode, robot_configuration='sawyer')
+env = Environment(action_mode=action_mode, robot_setup='sawyer')
 ```
 
 A full example (using the Sawyer) can be seen in [examples/swap_arm.py](examples/swap_arm.py).

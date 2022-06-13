@@ -1,8 +1,10 @@
+from hashlib import new
+from pyrep.const import ConfigurationPathAlgorithms as Algos
 from pyrep.objects.object import Object
 from pyrep.robots.configuration_paths.arm_configuration_path import (
     ArmConfigurationPath)
 from rlbench.backend.robot import Robot
-
+from scipy.spatial.transform import Rotation as R
 
 class Waypoint(object):
 
@@ -15,11 +17,12 @@ class Waypoint(object):
         self._linear_only = False
         self._start_of_path_func = start_of_path_func
         self._end_of_path_func = end_of_path_func
+        self.skip = False
         if len(self._ext) > 0:
-            self._ignore_collisions = 'ignore_collisions' in self._ext
+            self._ignore_collisions = 'ignore_collision' in self._ext
             self._linear_only = 'linear' in self._ext
 
-    def get_path(self, ignore_collisions=False) -> ArmConfigurationPath:
+    def get_path(self, ignore_collisions=False, rot_change=False) -> ArmConfigurationPath:
         raise NotImplementedError()
 
     def get_ext(self) -> str:
@@ -42,16 +45,22 @@ class Waypoint(object):
 
 class Point(Waypoint):
 
-    def get_path(self, ignore_collisions=False) -> ArmConfigurationPath:
+    def get_path(self, ignore_collisions=False, rot_change=False) -> ArmConfigurationPath:
         arm = self._robot.arm
+        if self._robot.name == 'ur5' and rot_change:
+            print("modify rot")
+            rotation = self.get_rotate()
+        else:
+            rotation = self._waypoint.get_orientation()
+
         if self._linear_only:
             path = arm.get_linear_path(self._waypoint.get_position(),
-                                euler=self._waypoint.get_orientation(),
+                                euler=rotation,
                                 ignore_collisions=(self._ignore_collisions or
                                                    ignore_collisions))
         else:
             path = arm.get_path(self._waypoint.get_position(),
-                                euler=self._waypoint.get_orientation(),
+                                euler=rotation,
                                 ignore_collisions=(self._ignore_collisions or ignore_collisions),
                                 trials=300,
                                 max_configs=100,
@@ -59,10 +68,36 @@ class Point(Waypoint):
                                 trials_per_goal=10)
         return path
 
+    def get_rotate(self):
+        if self._robot.name == 'ur5':
+            original_quat = self._waypoint.get_quaternion()
+            r1 = R.from_quat(original_quat)
+            r2 = R.from_euler('zyx', [-90, 0, 0], degrees=True)
+            r3 = r2 * r1
+
+            new_euler = r3.as_euler('xyz')
+            return new_euler
+        else:
+            return self._waypoint.get_orientation()
+
+
 
 class PredefinedPath(Waypoint):
 
-    def get_path(self, ignore_collisions=False) -> ArmConfigurationPath:
+    def get_path(self, ignore_collisions=False, rot_change=False) -> ArmConfigurationPath:
         arm = self._robot.arm
+        if rot_change:
+            self.get_rotate()
+
         path = arm.get_path_from_cartesian_path(self._waypoint)
         return path
+
+    def get_rotate(self):
+        if self._robot.name == 'ur5':
+            original_quat = self._waypoint.get_quaternion()
+            r1 = R.from_quat(original_quat)
+            r2 = R.from_euler('zyx', [90, 0, 0], degrees=True)
+            r3 = r2 * r1
+
+            new_quat = r3.as_quat()
+            self._waypoint.set_quaternion(new_quat)

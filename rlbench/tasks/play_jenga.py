@@ -1,8 +1,9 @@
 from typing import List, Tuple
+import numpy as np
 from pyrep.objects.proximity_sensor import ProximitySensor
 from pyrep.objects.shape import Shape
-from rlbench.backend.task import Task
 from rlbench.backend.conditions import DetectedCondition, NothingGrasped
+from rlbench.backend.task import Task
 
 
 class PlayJenga(Task):
@@ -10,22 +11,13 @@ class PlayJenga(Task):
     def init_task(self) -> None:
         target = Shape('target_cuboid')
         original_detector = ProximitySensor('original_detector')
-        self.register_success_conditions(
-            [DetectedCondition(Shape('Cuboid0'), original_detector),
-             DetectedCondition(Shape('Cuboid1'), original_detector),
-             DetectedCondition(Shape('Cuboid2'), original_detector),
-             DetectedCondition(Shape('Cuboid3'), original_detector),
-             DetectedCondition(Shape('Cuboid4'), original_detector),
-             DetectedCondition(Shape('Cuboid5'), original_detector),
-             DetectedCondition(Shape('Cuboid6'), original_detector),
-             DetectedCondition(Shape('Cuboid7'), original_detector),
-             DetectedCondition(Shape('Cuboid8'), original_detector),
-             DetectedCondition(Shape('Cuboid9'), original_detector),
-             DetectedCondition(Shape('Cuboid10'), original_detector),
-             DetectedCondition(Shape('Cuboid11'), original_detector),
-             DetectedCondition(Shape('Cuboid12'), original_detector),
-             DetectedCondition(target, original_detector, negated=True),
-             NothingGrasped(self.robot.gripper)])
+        bricks = [Shape('Cuboid%d' % i) for i in range(13)]
+        conds = [DetectedCondition(b, original_detector) for b in bricks]
+        conds.extend([
+            DetectedCondition(target, original_detector, negated=True),
+            NothingGrasped(self.robot.gripper)
+        ])
+        self.register_success_conditions(conds)
         self.register_graspable_objects([target])
 
     def init_episode(self, index: int) -> List[str]:
@@ -41,4 +33,4 @@ class PlayJenga(Task):
         return 1
 
     def base_rotation_bounds(self) -> Tuple[List[float], List[float]]:
-        return [0, 0, 0], [0, 0, 3.14]
+        return [0, 0, -np.pi / 8], [0, 0, np.pi / 8]

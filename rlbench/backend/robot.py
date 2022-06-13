@@ -6,6 +6,7 @@ class Robot(object):
     """Simple container for the robot components.
     """
 
-    def __init__(self, arm: Arm, gripper: Gripper):
+    def __init__(self, arm: Arm, gripper: Gripper, name: str):
         self.arm = arm
         self.gripper = gripper
+        self.name = name

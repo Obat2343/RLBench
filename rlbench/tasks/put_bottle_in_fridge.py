@@ -1,20 +1,19 @@
 from typing import List, Tuple
-
+import numpy as np
 from pyrep.objects.object import Object
-from pyrep.objects.shape import Shape
 from pyrep.objects.proximity_sensor import ProximitySensor
-from rlbench.backend.task import Task
+from pyrep.objects.shape import Shape
 from rlbench.backend.conditions import DetectedCondition, NothingGrasped
+from rlbench.backend.task import Task
 
 
 class PutBottleInFridge(Task):
 
     def init_task(self) -> None:
         bottle = Shape('bottle')
-        success_sensor = ProximitySensor('success')
         self.register_graspable_objects([bottle])
         self.register_success_conditions(
-            [DetectedCondition(bottle, success_sensor),
+            [DetectedCondition(bottle, ProximitySensor('success')),
              NothingGrasped(self.robot.gripper)])
 
     def init_episode(self, index: int) -> List[str]:
@@ -32,4 +31,4 @@ class PutBottleInFridge(Task):
 
     def base_rotation_bounds(self) -> Tuple[Tuple[float, float, float],
                                             Tuple[float, float, float]]:
-        return (0.0, 0.0, -3.14/2), (0.0, 0.0, 3.14/2)
+        return (0.0, 0.0, -np.pi / 4), (0.0, 0.0, np.pi / 4)
