@@ -156,8 +156,6 @@ class TaskEnvironment(object):
                 except Exception as e:
                     attempts -= 1
                     logging.info('Bad demo. ' + str(e))
-                    random_seed = np.random.get_state()
-                    self.reset()
             if attempts <= 0:
                 raise RuntimeError(
                     'Could not collect demos. Maybe a problem with the task?')
@@ -172,13 +170,3 @@ class TaskEnvironment(object):
         np.random.set_state(seed)
         print("reset to seed")
         return self.reset()
-
-    # def get_demos_with_seed(self, amount: int, seed: tuple, callable_each_step: Callable[[Observation], None] = None,
-    #               ) -> List[Demo]:
-    #     ctr_loop = self._robot.arm.joints[0].is_control_loop_enabled()
-    #     self._robot.arm.set_control_loop_enabled(True)
-    #     demos = self._get_live_demos(
-    #             amount, callable_each_step, 1, random_pos=False, seed=seed)
-    #     self._robot.arm.set_control_loop_enabled(ctr_loop)
-    #     print("get demo")
-    #     return demos
